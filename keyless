@@ -1,0 +1,376 @@
+-- LocalScript: put in StarterPlayer > StarterPlayerScripts (or StarterGui)
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+local LOAD_DURATION = 90 -- seconds (1 minute 30)
+
+local COLORS = {
+	dark = Color3.fromRGB(20, 13, 32),
+	purple = Color3.fromRGB(155, 75, 255),
+	pink = Color3.fromRGB(255, 100, 210),
+	gold = Color3.fromRGB(255, 205, 100),
+	white = Color3.fromRGB(245, 235, 255),
+	muted = Color3.fromRGB(175, 155, 195),
+	green = Color3.fromRGB(100, 255, 160),
+}
+
+-- Remove old GUIs
+for _, name in ipairs({ "LoadingSystem", "UniqueLuckUI" }) do
+	local old = playerGui:FindFirstChild(name)
+	if old then
+		old:Destroy()
+	end
+end
+
+--------------------------------------------------
+-- HELPERS
+--------------------------------------------------
+
+local function addCorner(obj, radius)
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, radius)
+	c.Parent = obj
+end
+
+local function addGradient(obj)
+	local g = Instance.new("UIGradient")
+	-- FIX: ColorSequence needs keypoints, not a plain list of Color3
+	g.Color = ColorSequence.new({
+		ColorSequenceKeypoint.new(0, COLORS.gold),
+		ColorSequenceKeypoint.new(0.33, COLORS.pink),
+		ColorSequenceKeypoint.new(0.66, COLORS.purple),
+		ColorSequenceKeypoint.new(1, COLORS.gold),
+	})
+	g.Offset = Vector2.new(-1, 0)
+	g.Parent = obj
+
+	TweenService:Create(
+		g,
+		TweenInfo.new(4, Enum.EasingStyle.Linear, Enum.EasingDirection.In, -1),
+		{ Offset = Vector2.new(1, 0) }
+	):Play()
+
+	return g
+end
+
+local function addBorder(obj)
+	local s = Instance.new("UIStroke")
+	s.Thickness = 2
+	s.Color = COLORS.white
+	s.Parent = obj
+	addGradient(s)
+end
+
+local function makeLabel(parent, text, size, pos, fontSize)
+	local l = Instance.new("TextLabel")
+	l.BackgroundTransparency = 1
+	l.Text = text
+	l.Size = size
+	l.Position = pos
+	l.Font = Enum.Font.GothamBold
+	l.TextSize = fontSize
+	l.TextColor3 = COLORS.white
+	l.Parent = parent
+	return l
+end
+
+local function makeDraggable(handle, frame)
+	local dragging = false
+	local startInput, startPos
+
+	handle.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1
+			or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			startInput = input.Position
+			startPos = frame.Position
+
+			local conn
+			conn = input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+					conn:Disconnect()
+				end
+			end)
+		end
+	end)
+
+	local moveConn = UIS.InputChanged:Connect(function(input)
+		if dragging and (
+			input.UserInputType == Enum.UserInputType.MouseMovement
+				or input.UserInputType == Enum.UserInputType.Touch
+			) then
+			local delta = input.Position - startInput
+			frame.Position = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + delta.X,
+				startPos.Y.Scale, startPos.Y.Offset + delta.Y
+			)
+		end
+	end)
+
+	-- FIX: don't leak the global connection when the GUI is destroyed
+	frame.Destroying:Connect(function()
+		moveConn:Disconnect()
+	end)
+end
+
+--------------------------------------------------
+-- FIRST: LOADER
+--------------------------------------------------
+
+local loaderGui = Instance.new("ScreenGui")
+loaderGui.Name = "LoadingSystem"
+loaderGui.ResetOnSpawn = false
+loaderGui.IgnoreGuiInset = true
+loaderGui.DisplayOrder = 999
+loaderGui.Parent = playerGui
+
+local loader = Instance.new("Frame")
+loader.AnchorPoint = Vector2.new(0.5, 0.5)
+loader.Size = UDim2.fromOffset(340, 205)
+loader.Position = UDim2.fromScale(0.5, 0.5)
+loader.BackgroundColor3 = COLORS.dark
+loader.BorderSizePixel = 0
+loader.Parent = loaderGui
+addCorner(loader, 12)
+addBorder(loader)
+
+local header = Instance.new("Frame")
+header.Size = UDim2.new(1, 0, 0, 53)
+header.BackgroundTransparency = 1
+header.Active = true
+header.Parent = loader
+
+local icon = Instance.new("TextLabel")
+icon.Size = UDim2.fromOffset(34, 34)
+icon.Position = UDim2.fromOffset(12, 9)
+icon.BackgroundColor3 = COLORS.gold
+icon.Text = "🍀"
+icon.TextColor3 = COLORS.dark
+icon.TextSize = 21
+icon.Font = Enum.Font.GothamBlack
+icon.Parent = header
+addCorner(icon, 8)
+
+local title = makeLabel(header, " UNIQUE LUCK", UDim2.new(1, -140, 0, 35), UDim2.fromOffset(55, 9), 16)
+title.TextXAlignment = Enum.TextXAlignment.Left
+addGradient(title)
+
+local badge = Instance.new("TextLabel")
+badge.Size = UDim2.fromOffset(65, 22)
+badge.Position = UDim2.new(1, -77, 0, 15)
+badge.BackgroundColor3 = Color3.fromRGB(60, 35, 85)
+badge.Text = "LOADING"
+badge.TextColor3 = COLORS.gold
+badge.TextSize = 9
+badge.Font = Enum.Font.GothamBold
+badge.Parent = header
+addCorner(badge, 20)
+
+local divider = Instance.new("Frame")
+divider.Size = UDim2.new(1, -24, 0, 1)
+divider.Position = UDim2.fromOffset(12, 53)
+divider.BackgroundColor3 = Color3.fromRGB(90, 65, 115)
+divider.BorderSizePixel = 0
+divider.Parent = loader
+
+local status = makeLabel(loader, "Initializing system...", UDim2.new(1, -24, 0, 22), UDim2.fromOffset(12, 66), 12)
+status.TextColor3 = COLORS.muted
+status.TextXAlignment = Enum.TextXAlignment.Left
+
+local barBG = Instance.new("Frame")
+barBG.Size = UDim2.new(1, -24, 0, 11)
+barBG.Position = UDim2.fromOffset(12, 101)
+barBG.BackgroundColor3 = Color3.fromRGB(55, 40, 75)
+barBG.BorderSizePixel = 0
+barBG.ClipsDescendants = true
+barBG.Parent = loader
+addCorner(barBG, 20)
+
+local bar = Instance.new("Frame")
+bar.Size = UDim2.new(0, 0, 1, 0)
+bar.BackgroundColor3 = COLORS.gold
+bar.BorderSizePixel = 0
+bar.Parent = barBG
+addCorner(bar, 20)
+addGradient(bar)
+
+local percent = makeLabel(loader, "0%", UDim2.new(1, -24, 0, 35), UDim2.fromOffset(12, 120), 24)
+percent.TextXAlignment = Enum.TextXAlignment.Left
+
+local footer = makeLabel(loader, "PLEASE WAIT WHILE THE INTERFACE LOADS", UDim2.new(1, -24, 0, 18), UDim2.fromOffset(12, 175), 9)
+footer.TextColor3 = COLORS.muted
+footer.TextXAlignment = Enum.TextXAlignment.Left
+
+makeDraggable(header, loader)
+
+--------------------------------------------------
+-- LOADING ANIMATION
+--------------------------------------------------
+
+local startTime = os.clock()
+
+while true do
+	local progress = math.clamp((os.clock() - startTime) / LOAD_DURATION, 0, 1)
+	local value = math.floor(progress * 100)
+
+	percent.Text = value .. "%"
+	bar.Size = UDim2.new(progress, 0, 1, 0)
+
+	if value < 25 then
+		status.Text = "Initializing system..."
+	elseif value < 50 then
+		status.Text = "Preparing interface..."
+	elseif value < 75 then
+		status.Text = "Loading visual components..."
+	elseif value < 100 then
+		status.Text = "Almost ready..."
+	else
+		break
+	end
+
+	task.wait(0.03)
+end
+
+percent.Text = "100%"
+bar.Size = UDim2.new(1, 0, 1, 0)
+status.Text = "Load complete!"
+badge.Text = "READY"
+badge.TextColor3 = COLORS.green
+
+task.wait(0.8)
+
+--------------------------------------------------
+-- FADE OUT LOADER
+--------------------------------------------------
+
+local fadeInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad)
+
+for _, obj in ipairs(loader:GetDescendants()) do
+	if obj:IsA("TextLabel") then
+		-- FIX: also fade the background (icon/badge have one)
+		TweenService:Create(obj, fadeInfo, {
+			TextTransparency = 1,
+			BackgroundTransparency = 1,
+		}):Play()
+	elseif obj:IsA("Frame") then
+		TweenService:Create(obj, fadeInfo, { BackgroundTransparency = 1 }):Play()
+	elseif obj:IsA("UIStroke") then
+		TweenService:Create(obj, fadeInfo, { Transparency = 1 }):Play()
+	end
+end
+
+TweenService:Create(loader, fadeInfo, {
+	BackgroundTransparency = 1,
+	Size = UDim2.fromOffset(310, 185),
+}):Play()
+
+task.wait(0.6)
+loaderGui:Destroy()
+
+--------------------------------------------------
+-- SECOND: UNIQUE LUCK UI
+--------------------------------------------------
+
+local uniqueGui = Instance.new("ScreenGui")
+uniqueGui.Name = "UniqueLuckUI"
+uniqueGui.ResetOnSpawn = false
+uniqueGui.IgnoreGuiInset = true
+uniqueGui.DisplayOrder = 1000
+uniqueGui.Parent = playerGui
+
+local main = Instance.new("Frame")
+main.AnchorPoint = Vector2.new(0.5, 0.5)
+main.Size = UDim2.fromOffset(0, 0)
+main.Position = UDim2.fromScale(0.5, 0.5)
+main.BackgroundColor3 = COLORS.dark
+main.BorderSizePixel = 0
+main.ClipsDescendants = true -- FIX: children no longer spill out during the open animation
+main.Parent = uniqueGui
+addCorner(main, 13)
+addBorder(main)
+
+local uniqueHeader = Instance.new("Frame")
+uniqueHeader.Size = UDim2.new(1, 0, 0, 55)
+uniqueHeader.BackgroundTransparency = 1
+uniqueHeader.Active = true
+uniqueHeader.Parent = main
+
+local uniqueTitle = makeLabel(uniqueHeader, " UNIQUE LUCK 🍀", UDim2.new(1, -20, 0, 36), UDim2.fromOffset(10, 8), 22)
+uniqueTitle.Font = Enum.Font.GothamBlack
+addGradient(uniqueTitle)
+
+local subtitle = makeLabel(main, "LEGENDARY FEATURE", UDim2.new(1, 0, 0, 20), UDim2.fromOffset(0, 57), 10)
+subtitle.TextColor3 = COLORS.muted
+
+local line = Instance.new("Frame")
+line.Size = UDim2.new(1, -28, 0, 1)
+line.Position = UDim2.fromOffset(14, 84)
+line.BackgroundColor3 = Color3.fromRGB(100, 65, 125)
+line.BorderSizePixel = 0
+line.Parent = main
+
+local uniqueStatus = makeLabel(main, "UNIQUE LUCK: INACTIVE", UDim2.new(1, -20, 0, 25), UDim2.fromOffset(10, 95), 12)
+uniqueStatus.TextColor3 = COLORS.muted
+
+local button = Instance.new("TextButton")
+button.Size = UDim2.new(1, -40, 0, 44)
+button.Position = UDim2.fromOffset(20, 132)
+button.BackgroundColor3 = Color3.fromRGB(85, 45, 130)
+button.Text = "  UNIQUE ACTIVE  "
+button.TextColor3 = COLORS.white
+button.Font = Enum.Font.GothamBold
+button.TextSize = 14
+button.AutoButtonColor = false
+button.Parent = main
+addCorner(button, 9)
+
+local buttonStroke = Instance.new("UIStroke")
+buttonStroke.Color = COLORS.pink
+buttonStroke.Thickness = 1.5
+buttonStroke.Parent = button
+
+-- Optional: if YOUR game has a RemoteEvent named "UniqueLuckToggle",
+-- the button tells the server about it (server must validate and apply the luck).
+local toggleRemote = ReplicatedStorage:FindFirstChild("UniqueLuckToggle")
+
+local active = false
+
+button.MouseButton1Click:Connect(function()
+	active = not active
+
+	if active then
+		uniqueStatus.Text = "UNIQUE LUCK: ACTIVE"
+		uniqueStatus.TextColor3 = COLORS.green
+		buttonStroke.Color = COLORS.green
+		TweenService:Create(button, TweenInfo.new(0.25), {
+			BackgroundColor3 = Color3.fromRGB(35, 120, 75),
+		}):Play()
+	else
+		uniqueStatus.Text = "UNIQUE LUCK: INACTIVE"
+		uniqueStatus.TextColor3 = COLORS.muted
+		buttonStroke.Color = COLORS.pink
+		TweenService:Create(button, TweenInfo.new(0.25), {
+			BackgroundColor3 = Color3.fromRGB(85, 45, 130),
+		}):Play()
+	end
+
+	if toggleRemote and toggleRemote:IsA("RemoteEvent") then
+		toggleRemote:FireServer(active)
+	end
+end)
+
+makeDraggable(uniqueHeader, main)
+
+TweenService:Create(
+	main,
+	TweenInfo.new(0.65, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+	{ Size = UDim2.fromOffset(310, 190) }
+):Play()
+
+print("Unique Luck interface displayed")
